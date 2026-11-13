@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calendrier des éclipses — Citizen</title>
+<style>
+  :root{
+    --noir:#0d0b0a; --noir2:#171310; --parch:#e9dcc0; --parch2:#cdb98f;
+    --or:#c9a227; --or2:#8a6d1a; --rouge:#7a1616; --rouge2:#a32020; --gris:#8c8273;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(ellipse at top,#1f1812 0%,var(--noir) 60%);color:var(--parch);
+       font-family:Georgia,"Times New Roman",serif;min-height:100vh}
+  header{text-align:center;padding:28px 16px 8px}
+  header .srv{letter-spacing:.35em;font-size:.8rem;color:var(--or)}
+  h1{margin:.2em 0 0;font-size:clamp(1.8rem,4vw,2.8rem);color:var(--or);text-shadow:0 0 18px rgba(201,162,39,.35);font-variant:small-caps}
+  .orn{color:var(--or2);letter-spacing:.6em;margin:6px 0 0}
+  main{max-width:1040px;margin:0 auto;padding:12px 16px 40px;display:grid;gap:18px;grid-template-columns:1fr}
+  @media(min-width:860px){main{grid-template-columns:1.25fr 1fr}}
+  .card{background:linear-gradient(180deg,var(--noir2),#110e0c);border:1px solid var(--or2);border-radius:6px;
+        padding:18px 20px;box-shadow:0 0 0 3px #0a0807,0 0 0 4px rgba(138,109,26,.5),0 10px 30px rgba(0,0,0,.5)}
+  .card h2{margin:0 0 12px;font-size:1.15rem;color:var(--or);font-variant:small-caps;letter-spacing:.06em;
+           border-bottom:1px solid rgba(138,109,26,.45);padding-bottom:8px}
+  .hero{grid-column:1/-1;display:grid;gap:18px;align-items:center;grid-template-columns:1fr}
+  @media(min-width:700px){.hero{grid-template-columns:220px 1fr}}
+  .sky{width:220px;height:220px;margin:auto;border-radius:50%;overflow:hidden;border:2px solid var(--or2);
+       box-shadow:0 0 30px rgba(201,162,39,.25) inset}
+  .phase{display:inline-block;padding:3px 10px;border-radius:3px;font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;
+         background:var(--rouge);color:#f4e6c8;border:1px solid var(--rouge2)}
+  .phase.none{background:#2a221a;border-color:var(--or2)}
+  .big{font-size:1.5rem;margin:.4em 0 .2em;color:var(--parch)}
+  .count{font-size:clamp(1.6rem,5vw,2.6rem);color:var(--or);font-variant-numeric:tabular-nums;letter-spacing:.04em}
+  .muted{color:var(--gris);font-size:.92rem}
+  .cal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .cal-head b{font-variant:small-caps;font-size:1.1rem;color:var(--parch)}
+  button,.btn{background:#231b13;color:var(--or);border:1px solid var(--or2);border-radius:4px;padding:6px 12px;
+              font-family:inherit;cursor:pointer;text-decoration:none;display:inline-block}
+  button:hover,.btn:hover{background:#2f2418}
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .dow{text-align:center;font-size:.75rem;color:var(--or2);text-transform:uppercase;letter-spacing:.08em;padding:4px 0}
+  .day{min-height:64px;background:#15110d;border:1px solid #2a2219;border-radius:3px;padding:4px 5px;font-size:.8rem;position:relative}
+  .day.out{opacity:.35}
+  .day.today{border-color:var(--or)}
+  .day .n{color:var(--gris)}
+  .ev{display:block;margin-top:3px;background:var(--rouge);border:1px solid var(--rouge2);color:#f6e7c9;border-radius:3px;
+      padding:2px 4px;font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ev.admin{background:#4a2a6a;border-color:#6d3f9a}
+  ul.list{list-style:none;margin:0;padding:0}
+  ul.list li{padding:10px 0;border-bottom:1px dashed rgba(138,109,26,.35);display:flex;gap:12px;align-items:center}
+  ul.list li:last-child{border-bottom:0}
+  .moonico{width:28px;height:28px;flex:none}
+  table.hours{width:100%;border-collapse:collapse;font-size:.92rem}
+  table.hours td{padding:5px 0;border-bottom:1px solid #241d15}
+  table.hours td:last-child{text-align:right;color:var(--or)}
+  .tip{font-size:.9rem;line-height:1.5}
+  .tip b{color:var(--or)}
+  footer{text-align:center;color:var(--gris);font-size:.8rem;padding:0 0 24px}
+</style>
+</head>
+<body>
+<header>
+  <div class="srv" id="srv">CITIZEN</div>
+  <h1>Calendrier des Éclipses</h1>
+  <div class="orn">✦ ☾ ✦</div>
+</header>
+
+<main>
+  <section class="card hero">
+    <svg class="sky" id="sky" viewBox="-110 -110 220 220" aria-label="Position de la lune par rapport au soleil">
+      <defs>
+        <radialGradient id="g-sky" cx="50%" cy="50%" r="60%">
+          <stop offset="0" stop-color="#3a6ea5"/><stop offset="1" stop-color="#1b355a"/>
+        </radialGradient>
+        <radialGradient id="g-sun" cx="50%" cy="50%" r="50%">
+          <stop offset="0" stop-color="#fff7d6"/><stop offset=".6" stop-color="#ffd76a"/><stop offset="1" stop-color="#ffb030" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="g-cor" cx="50%" cy="50%" r="50%">
+          <stop offset=".45" stop-color="#fff6dc" stop-opacity=".95"/><stop offset="1" stop-color="#ffe7b0" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <rect x="-110" y="-110" width="220" height="220" fill="url(#g-sky)"/>
+      <rect id="dark" x="-110" y="-110" width="220" height="220" fill="#06040a" opacity="0"/>
+      <circle id="corona" r="62" fill="url(#g-cor)" opacity="0"/>
+      <circle r="34" fill="url(#g-sun)"/>
+      <circle r="24" fill="#fff4c8"/>
+      <circle id="moon" r="26" fill="#2b2833" stroke="#4b4656" stroke-width="1.5" cx="200" cy="0"/>
+    </svg>
+    <div>
+      <span class="phase none" id="phase">Aucune éclipse</span>
+      <div class="big" id="title">Chargement…</div>
+      <div class="count" id="count">--</div>
+      <div class="muted" id="sub"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="cal-head">
+      <button id="prev" aria-label="Mois précédent">‹</button>
+      <b id="month">—</b>
+      <button id="nextm" aria-label="Mois suivant">›</button>
+    </div>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <div style="display:grid;gap:18px;align-content:start">
+    <section class="card">
+      <h2>Prochaines éclipses</h2>
+      <ul class="list" id="list"><li class="muted">Chargement…</li></ul>
+      <p style="margin:14px 0 0"><a class="btn" href="/eclipses.ics">📅 Ajouter à mon agenda</a></p>
+    </section>
+    <section class="card">
+      <h2>Heures d'ouverture</h2>
+      <table class="hours" id="hours"></table>
+    </section>
+    <section class="card tip">
+      <h2>Conseils du Royaume</h2>
+      <p>Quand l'éclipse approche, <b>la lune glisse vers le soleil</b> dans le ciel : levez les yeux !</p>
+      <p>Pendant l'éclipse totale, <b>les créatures des ténèbres déferlent</b>. Restez groupés.</p>
+      <p>Ne fixez jamais le soleil sans <b>casque d'éclipse</b> : cuir, lingot de fer et verre teinté.</p>
+    </section>
+  </div>
+</main>
+<footer id="foot">Heures affichées : Europe/Paris</footer>
+
+<script>
+(function(){
+  let data = null, offset = 0, view = null;
+  const DAYS = ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY","SUNDAY"];
+  const DAYS_FR = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"];
+  const $ = id => document.getElementById(id);
+
+  function tz(){ return (data && data.timezone) || "Europe/Paris"; }
+  function now(){ return Date.now() + offset; }
+  function parts(ms){
+    const f = new Intl.DateTimeFormat("fr-FR",{timeZone:tz(),year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"});
+    const o = {}; f.formatToParts(new Date(ms)).forEach(p => o[p.type] = p.value);
+    return {y:+o.year, m:+o.month, d:+o.day, h:o.hour, min:o.minute};
+  }
+  function fmtLong(ms){
+    return new Intl.DateTimeFormat("fr-FR",{timeZone:tz(),weekday:"long",day:"numeric",month:"long",hour:"2-digit",minute:"2-digit"}).format(new Date(ms)).replace(":", "h");
+  }
+  function fmtHour(ms){ const p = parts(ms); return p.h + "h" + p.min; }
+  function dur(ms){
+    if (ms < 0) ms = 0;
+    const s = Math.floor(ms/1000), d = Math.floor(s/86400), h = Math.floor(s%86400/3600), m = Math.floor(s%3600/60), sec = s%60;
+    const pad = v => String(v).padStart(2,"0");
+    return (d ? d + " j " : "") + pad(h) + ":" + pad(m) + ":" + pad(sec);
+  }
+  function phaseOf(e, t){
+    if (t < e.approachStart || t >= e.recedeEnd) return "none";
+    if (t < e.totalityStart) return "approche";
+    if (t < e.totalityEnd) return "totale";
+    return "eloignement";
+  }
+  function sepOf(e, t){
+    const f = (a,b) => b<=a ? 1 : Math.min(1, Math.max(0, (t-a)/(b-a)));
+    switch (phaseOf(e,t)){
+      case "approche": return 1 - f(e.approachStart, e.totalityStart);
+      case "totale": return 0;
+      case "eloignement": return -f(e.totalityEnd, e.recedeEnd);
+      default: return 1;
+    }
+  }
+
+  async function load(){
+    try{
+      const r = await fetch("/api/eclipses", {cache:"no-store"});
+      data = await r.json();
+      offset = data.now - Date.now();
+      $("srv").textContent = (data.server || "CITIZEN").toUpperCase();
+      $("foot").textContent = "Heures affichées : " + tz() + " · mise à jour automatique";
+      if (!view){ const p = parts(now()); view = {y:p.y, m:p.m}; }
+      renderList(); renderHours(); renderCal(); tick();
+    }catch(e){
+      $("title").textContent = "Serveur injoignable";
+      $("sub").textContent = "Le calendrier se met à jour quand le serveur est en ligne.";
+    }
+  }
+
+  function current(){
+    if (!data) return null;
+    const t = now();
+    const list = data.eclipses.filter(e => e.recedeEnd > t).sort((a,b)=>a.totalityStart-b.totalityStart);
+    return list[0] || null;
+  }
+
+  function tick(){
+    const e = current(), t = now();
+    const ph = $("phase");
+    if (!e){
+      ph.className = "phase none"; ph.textContent = "Aucune éclipse";
+      $("title").textContent = "Aucune éclipse n'est prévue"; $("count").textContent = "--"; $("sub").textContent = "";
+      drawSky(1, 0); return;
+    }
+    const p = phaseOf(e,t), s = sepOf(e,t);
+    const cover = 1 - Math.min(1, Math.abs(s)/0.25), dark = p === "none" ? 0 : cover*cover*(3-2*cover);
+    drawSky(p === "none" ? 1 : s, dark);
+    if (p === "none"){
+      ph.className = "phase none"; ph.textContent = "Prochaine éclipse";
+      $("title").textContent = fmtLong(e.totalityStart);
+      $("count").textContent = dur(e.totalityStart - t);
+      $("sub").textContent = "La lune commencera à s'approcher du soleil à " + fmtHour(e.approachStart) + ".";
+    } else if (p === "approche"){
+      ph.className = "phase"; ph.textContent = "La lune approche";
+      $("title").textContent = "Éclipse totale à " + fmtHour(e.totalityStart);
+      $("count").textContent = dur(e.totalityStart - t);
+      $("sub").textContent = "Levez les yeux en jeu : la lune glisse vers le soleil.";
+    } else if (p === "totale"){
+      ph.className = "phase"; ph.textContent = "Éclipse totale";
+      $("title").textContent = "Les créatures déferlent !";
+      $("count").textContent = dur(e.totalityEnd - t);
+      $("sub").textContent = "Fin de la totalité à " + fmtHour(e.totalityEnd) + ".";
+    } else {
+      ph.className = "phase"; ph.textContent = "La lune s'éloigne";
+      $("title").textContent = "La lumière revient";
+      $("count").textContent = dur(e.recedeEnd - t);
+      $("sub").textContent = "Fin de l'éclipse à " + fmtHour(e.recedeEnd) + ".";
+    }
+  }
+
+  function drawSky(sep, dark){
+    const mx = sep * 120, my = sep * 26;
+    $("moon").setAttribute("cx", mx.toFixed(1));
+    $("moon").setAttribute("cy", my.toFixed(1));
+    $("dark").setAttribute("opacity", (0.85*dark).toFixed(3));
+    $("corona").setAttribute("opacity", dark.toFixed(3));
+  }
+
+  function moonIcon(src){
+    const fill = src === "ADMIN" ? "#6d3f9a" : "#a32020";
+    return '<svg class="moonico" viewBox="0 0 28 28"><circle cx="14" cy="14" r="11" fill="#ffd76a"/><circle cx="17" cy="12" r="10" fill="#151018" stroke="'+fill+'" stroke-width="1.5"/></svg>';
+  }
+
+  function renderList(){
+    const t = now();
+    const list = data.eclipses.filter(e => e.recedeEnd > t).sort((a,b)=>a.totalityStart-b.totalityStart);
+    $("list").innerHTML = list.length ? list.map(e =>
+      '<li>' + moonIcon(e.source) + '<div><div>' + cap(fmtLong(e.totalityStart)) + '</div><div class="muted">Approche dès ' +
+      fmtHour(e.approachStart) + ' · fin ' + fmtHour(e.recedeEnd) + (e.source === "ADMIN" ? ' · décrétée par le Royaume' : '') + '</div></div></li>'
+    ).join("") : '<li class="muted">Aucune éclipse planifiée.</li>';
+  }
+  function cap(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  function renderHours(){
+    $("hours").innerHTML = DAYS.map((d,i) => {
+      const v = (data.openingHours||{})[d];
+      const txt = v ? v.replace("-", " → ").replace(/:/g,"h") : "Fermé";
+      return "<tr><td>" + DAYS_FR[i] + "</td><td>" + txt + "</td></tr>";
+    }).join("");
+  }
+
+  function renderCal(){
+    const y = view.y, m = view.m;
+    const names = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+    $("month").textContent = names[m-1] + " " + y;
+    const first = new Date(Date.UTC(y, m-1, 1));
+    const startDow = (first.getUTCDay() + 6) % 7;
+    const daysIn = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const today = parts(now());
+    const byDay = {};
+    data.eclipses.forEach(e => {
+      const p = parts(e.totalityStart);
+      const k = p.y + "-" + p.m + "-" + p.d;
+      (byDay[k] = byDay[k] || []).push(e);
+    });
+    let html = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"].map(d => '<div class="dow">'+d+'</div>').join("");
+    const total = Math.ceil((startDow + daysIn) / 7) * 7;
+    for (let i = 0; i < total; i++){
+      const dt = new Date(Date.UTC(y, m-1, 1 + i - startDow));
+      const dy = dt.getUTCFullYear(), dm = dt.getUTCMonth()+1, dd = dt.getUTCDate();
+      const k = dy + "-" + dm + "-" + dd;
+      const cls = ["day"];
+      if (dm !== m) cls.push("out");
+      if (dy === today.y && dm === today.m && dd === today.d) cls.push("today");
+      const evs = (byDay[k] || []).map(e => '<span class="ev' + (e.source === "ADMIN" ? " admin" : "") + '" title="Éclipse totale à ' +
+        fmtHour(e.totalityStart) + '">☾ ' + fmtHour(e.totalityStart) + '</span>').join("");
+      html += '<div class="' + cls.join(" ") + '"><span class="n">' + dd + '</span>' + evs + '</div>';
+    }
+    $("grid").innerHTML = html;
+  }
+
+  $("prev").onclick = () => { if(!view) return; view.m--; if (view.m < 1){ view.m = 12; view.y--; } renderCal(); };
+  $("nextm").onclick = () => { if(!view) return; view.m++; if (view.m > 12){ view.m = 1; view.y++; } renderCal(); };
+
+  load();
+  setInterval(tick, 1000);
+  setInterval(load, 60000);
+})();
+</script>
+</body>
+</html>
