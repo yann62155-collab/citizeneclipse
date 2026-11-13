@@ -60,7 +60,7 @@ public class DarkMonk extends Monster {
 
     public static AttributeSupplier.Builder createAttributes() {
         return Monster.createMonsterAttributes()
-                .add(Attributes.MAX_HEALTH, 200.0)
+                .add(Attributes.MAX_HEALTH, 1000.0)
                 .add(Attributes.ATTACK_DAMAGE, 10.0)
                 .add(Attributes.MOVEMENT_SPEED, 0.33)
                 .add(Attributes.ARMOR, 8.0)
@@ -70,8 +70,17 @@ public class DarkMonk extends Monster {
                 .add(Attributes.SCALE, 1.6);
     }
 
+    /** Grand Moine (true) ou simple disciple (false). */
+    public boolean isGrand() {
+        return true;
+    }
+
     @Override
     protected void registerGoals() {
+        if (!isGrand()) {
+            // Les disciples suivent le Grand Moine.
+            this.goalSelector.addGoal(5, new FollowGrandMonkGoal(this));
+        }
         // On remplace toute l'IA d'illageois (pas de raid, pas d'attaque des villageois).
         this.goalSelector.addGoal(0, new FloatGoal(this));
         this.goalSelector.addGoal(2, new MeleeAttackGoal(this, 1.0, true));
@@ -143,7 +152,7 @@ public class DarkMonk extends Monster {
     @Override
     protected void customServerAiStep() {
         super.customServerAiStep();
-        bossBar.setProgress(this.getHealth() / this.getMaxHealth());
+        if (isGrand()) bossBar.setProgress(this.getHealth() / this.getMaxHealth());
         if (!(this.level() instanceof ServerLevel sl)) return;
 
         if (zoneCooldown > 0) zoneCooldown--;
@@ -176,7 +185,7 @@ public class DarkMonk extends Monster {
 
         if (target != null && target.isAlive() && globalCooldown == 0) {
             double d2 = this.distanceToSqr(target);
-            if (zoneCooldown == 0 && d2 < 7.5 * 7.5) {
+            if (isGrand() && zoneCooldown == 0 && d2 < 7.5 * 7.5) {
                 startCast(Cast.ZONE, 30);
                 zoneCooldown = enraged ? 140 : 220;
                 this.playSound(SoundEvents.EVOKER_PREPARE_ATTACK, 2.0F, 0.5F);
@@ -260,7 +269,7 @@ public class DarkMonk extends Monster {
     private void releaseSpiral(ServerLevel sl, LivingEntity target, boolean enraged) {
         if (target == null || !target.isAlive()) return;
         Vec3 from = this.getEyePosition();
-        int count = enraged ? 2 : 1;
+        int count = enraged && isGrand() ? 2 : 1;
         for (int i = 0; i < count; i++) {
             Vec3 aim = target.position().add(0, target.getBbHeight() * 0.5, 0).subtract(from).normalize();
             if (i == 1) aim = aim.yRot(0.25F).normalize();
@@ -327,7 +336,9 @@ public class DarkMonk extends Monster {
         sl.playSound(null, at.x, at.y, at.z, SoundEvents.EVOKER_CAST_SPELL, SoundSource.HOSTILE, 1.0F, 1.4F);
         if (hit != null) {
             boolean enraged = this.getHealth() < this.getMaxHealth() * 0.5F;
-            hit.hurt(this.damageSources().indirectMagic(this, this), enraged ? 9.0F : 7.0F);
+            float dmg = enraged ? 9.0F : 7.0F;
+            if (!isGrand()) dmg = 4.0F;
+            hit.hurt(this.damageSources().indirectMagic(this, this), dmg);
             hit.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 60, 1), this);
             hit.addEffect(new MobEffectInstance(MobEffects.LEVITATION, 20, 0), this);
             hit.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 50, 0), this);
@@ -337,7 +348,7 @@ public class DarkMonk extends Monster {
     @Override
     public void startSeenByPlayer(ServerPlayer player) {
         super.startSeenByPlayer(player);
-        bossBar.addPlayer(player);
+        if (isGrand()) bossBar.addPlayer(player);
     }
 
     @Override
@@ -391,5 +402,50 @@ public class DarkMonk extends Monster {
             }
         }
         EclipseCreature.tick(this);
+    }
+
+    /** Les disciples restent groupés autour du Grand Moine quand ils ne se battent pas. */
+    static final class FollowGrandMonkGoal extends net.minecraft.world.entity.ai.goal.Goal {
+        private final DarkMonk disciple;
+        private DarkMonk leader;
+        private int recalc;
+
+        FollowGrandMonkGoal(DarkMonk disciple) {
+            this.disciple = disciple;
+            this.setFlags(java.util.EnumSet.of(Flag.MOVE));
+        }
+
+        private DarkMonk findLeader() {
+            List<DarkMonk> list = disciple.level().getEntitiesOfClass(DarkMonk.class,
+                    disciple.getBoundingBox().inflate(48.0), m -> m.isGrand() && m.isAlive());
+            return list.isEmpty() ? null : list.get(0);
+        }
+
+        @Override
+        public boolean canUse() {
+            if (disciple.getTarget() != null) return false;
+            leader = findLeader();
+            return leader != null && disciple.distanceToSqr(leader) > 6.0 * 6.0;
+        }
+
+        @Override
+        public boolean canContinueToUse() {
+            return leader != null && leader.isAlive() && disciple.getTarget() == null
+                    && disciple.distanceToSqr(leader) > 3.0 * 3.0;
+        }
+
+        @Override
+        public void tick() {
+            if (--recalc <= 0) {
+                recalc = 10;
+                disciple.getNavigation().moveTo(leader, 1.1);
+            }
+        }
+
+        @Override
+        public void stop() {
+            leader = null;
+            disciple.getNavigation().stop();
+        }
     }
 }

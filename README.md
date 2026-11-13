@@ -51,21 +51,23 @@ Elles apparaissent **en groupes** (1 à 3), ne brûlent pas au soleil et **parte
 | Spectre d'éclipse | grand phantom violet | 30 | fond sur les joueurs depuis le ciel |
 | **Colosse d'éclipse** | **zombie mutant géant (~4,5 blocs)** rouge sombre | 140 | frappe à 14, quasi insensible au recul |
 
-### Moine ténébreux (boss unique)
+### Grand Moine ténébreux et ses disciples
 
-- **Un seul par éclipse**, il apparaît dès que les créatures déferlent, à 24–40 blocs d'un joueur au hasard.
-- Grand (1,6×), modèle sur mesure : capuche pointue, visage dans l'ombre, yeux violets lumineux, mantelet, robe et cape en lambeaux qui flottent, volutes violettes autour de lui. **200 PV**, armure 8, insensible au recul, barre de boss violette.
-- Bras croisés tant qu'on le laisse tranquille : il **attaque les joueurs à moins de 8 blocs** et **se défend** quand on le frappe.
-- **Pouvoirs magiques** (aucun ne détruit de bloc : seulement particules, dégâts magiques et effets) :
-  - **Cercle des ténèbres** (zone) : un cercle de flammes d'âme se dessine au sol (1,5 s pour fuir), puis une onde
-    frappe tous les joueurs à moins de 8 blocs : 8 dégâts, projection, Wither et Obscurité.
-  - **Spirale d'ombre** (attaque directe) : il lève les bras et lance une double hélice violette qui poursuit sa cible
-    (4 à 28 blocs) : 7 dégâts, lenteur, lévitation courte. Un mur l'arrête sans être abîmé.
-  - **5 secondes minimum entre deux sorts.** Sous 50 % de vie il enrage : plus de dégâts, deux spirales à la fois.
-- Se régénère s'il n'est pas combattu.
-- **Sa position est annoncée dans le chat toutes les minutes** (coordonnées, joueur le plus proche, PV restants).
-- Message à sa mort avec le nom du vainqueur. Il disparaît en fumée à la fin de l'éclipse s'il est encore en vie.
-- Test : `/eclipse moine` (admin, pendant une éclipse) le fait apparaître près de vous.
+- **Grand Moine** : un seul par éclipse, **1000 PV**, grand (1,6×), robe noire, yeux violets, barre de boss.
+  Il arrive **entouré de 4 moines disciples** et en rappelle de nouveaux toutes les 90 s (jamais plus de 4 en vie).
+- **Moines disciples** : robe pourpre, yeux rouges, taille normale, **200 PV chacun**, **4 maximum en même temps**.
+  Ils suivent le Grand Moine, attaquent les joueurs qui s'approchent, se défendent et lancent une spirale d'ombre plus faible
+  (5 s minimum entre deux sorts).
+- **Pouvoirs du Grand Moine** (aucun ne détruit de bloc) :
+  - **Cercle des ténèbres** : cercle de flammes d'âme au sol (1,5 s pour fuir), puis onde sur 8 blocs : 8 dégâts, projection, Wither, Obscurité.
+  - **Spirale d'ombre** : double hélice violette qui poursuit sa cible (4 à 28 blocs) : 7 dégâts, lenteur, lévitation courte.
+  - **5 secondes minimum entre deux sorts.** Sous 50 % de vie il enrage (plus de dégâts, deux spirales).
+- **Position annoncée dans le chat toutes les minutes** (Grand Moine, PV, nombre de disciples).
+- **Quand le Grand Moine tombe** : message avec le nom du vainqueur, puis **cinématique lancée automatiquement**
+  (`moine.commandeCinematique` dans la config, vide tant que la vidéo n'est pas prête).
+  **Il ne revient plus jamais** : aux éclipses suivantes, seuls ses 4 disciples apparaissent.
+- Commandes admin : `/eclipse moine` (le fait apparaître près de soi pendant une éclipse), `/eclipse moine disciples`,
+  `/eclipse moine statut`, `/eclipse moine reinitialiser` (le Grand Moine pourra revenir — utile après un test).
 
 **Mutants** : 15 % des zombies, archers et araignées d'éclipse apparaissent en version mutante,
 1,9× plus grande, avec plus de vie et de dégâts (`chanceMutantPourcent`, `tailleMutant` dans la config).
@@ -95,7 +97,7 @@ Elles apparaissent **en groupes** (1 à 3), ne brûlent pas au soleil et **parte
 | `/eclipse annuler <id>` | admin |
 | `/eclipse arreter` | admin — interrompt l'éclipse en cours |
 | `/eclipse generer` | admin — force le minimum hebdomadaire |
-| `/eclipse moine` | admin — fait apparaître le Moine ténébreux près de soi (pendant une éclipse) |
+| `/eclipse moine` (`disciples`, `statut`, `reinitialiser`) | admin — Grand Moine / disciples (voir plus haut) |
 | `/eclipse vague` | admin — force une vague autour de soi (même en créatif) et dit ce qui bloque |
 | `/eclipse statut` / `/eclipse recharger` | admin |
 

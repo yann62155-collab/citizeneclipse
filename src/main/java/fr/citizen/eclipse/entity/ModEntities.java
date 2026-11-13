@@ -40,6 +40,10 @@ public final class ModEntities {
             () -> EntityType.Builder.<DarkMonk>of(DarkMonk::new, MobCategory.MONSTER)
                     .sized(0.6F, 1.95F).eyeHeight(1.62F).clientTrackingRange(12).build("dark_monk"));
 
+    public static final DeferredHolder<EntityType<?>, EntityType<DiscipleMonk>> DISCIPLE_MONK = ENTITY_TYPES.register("disciple_monk",
+            () -> EntityType.Builder.<DiscipleMonk>of(DiscipleMonk::new, MobCategory.MONSTER)
+                    .sized(0.6F, 1.95F).eyeHeight(1.62F).clientTrackingRange(10).build("disciple_monk"));
+
     @EventBusSubscriber(modid = CitizenEclipse.MODID, bus = EventBusSubscriber.Bus.MOD)
     public static final class AttributeEvents {
         @SubscribeEvent
@@ -50,6 +54,7 @@ public final class ModEntities {
             event.put(DUSK_SPIDER.get(), DuskSpider.createAttributes().build());
             event.put(ECLIPSE_WRAITH.get(), EclipseWraith.createAttributes().build());
             event.put(DARK_MONK.get(), DarkMonk.createAttributes().build());
+            event.put(DISCIPLE_MONK.get(), DiscipleMonk.createDiscipleAttributes().build());
         }
     }
 }

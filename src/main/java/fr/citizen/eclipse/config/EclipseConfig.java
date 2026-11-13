@@ -136,6 +136,16 @@ public final class EclipseConfig {
         public int annonceSecondes = 60;
         public int distanceMin = 24;
         public int distanceMax = 40;
+        /** Nombre maximum de moines disciples en vie en même temps. */
+        public int disciplesMax = 4;
+        /** Le Grand Moine rappelle des disciples (jusqu'au maximum) toutes les N secondes. */
+        public int renfortDisciplesSecondes = 90;
+        /**
+         * Commande lancée par la console quand le Grand Moine tombe (sans le « / »).
+         * Laisser vide tant que la cinématique n'est pas prête. Exemple : "cinematique lancer moine".
+         */
+        public String commandeCinematique = "";
+        public int delaiCinematiqueSecondes = 4;
     }
 
     // ---------------------------------------------------------------- vision
@@ -227,6 +237,10 @@ public final class EclipseConfig {
         moine.annonceSecondes = clamp(moine.annonceSecondes, 10, 3600);
         moine.distanceMin = clamp(moine.distanceMin, 8, 96);
         moine.distanceMax = clamp(moine.distanceMax, moine.distanceMin + 1, 128);
+        moine.disciplesMax = clamp(moine.disciplesMax, 0, 4);
+        moine.renfortDisciplesSecondes = clamp(moine.renfortDisciplesSecondes, 10, 3600);
+        moine.delaiCinematiqueSecondes = clamp(moine.delaiCinematiqueSecondes, 0, 120);
+        if (moine.commandeCinematique == null) moine.commandeCinematique = "";
         if (dimensions == null) dimensions = new ArrayList<>(List.of("minecraft:overworld"));
         if (annonces.rappelsMinutes == null) annonces.rappelsMinutes = new ArrayList<>();
         if (creatures.types == null || creatures.types.isEmpty()) creatures.types = new Creatures().types;

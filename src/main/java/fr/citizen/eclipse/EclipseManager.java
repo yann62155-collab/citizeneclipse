@@ -2,6 +2,9 @@ package fr.citizen.eclipse;
 
 import fr.citizen.eclipse.config.EclipseConfig;
 import fr.citizen.eclipse.entity.DarkMonk;
+import fr.citizen.eclipse.entity.DiscipleMonk;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.particles.ParticleTypes;
 import fr.citizen.eclipse.entity.DuskSpider;
 import fr.citizen.eclipse.entity.EclipseColossus;
 import fr.citizen.eclipse.entity.EclipseCreature;
@@ -680,66 +683,115 @@ public final class EclipseManager {
     }
 
 
-    // ================================================================== moine ténébreux
+    // ================================================================== moines (Grand Moine + disciples)
 
     private long lastMonkAnnounce = 0;
+    private long lastReinforce = 0;
     private BlockPos monkLastPos = null;
+    private long cinematicAtTick = -1;
 
     private void monkTick(MinecraftServer server, Eclipse cur, EclipseConfig cfg) {
+        // Cinématique différée après la chute du Grand Moine.
+        if (cinematicAtTick >= 0 && tick >= cinematicAtTick) {
+            cinematicAtTick = -1;
+            runCinematic(server, cfg);
+        }
         if (cur == null) {
             monkLastPos = null;
             return;
         }
         if (!cfg.moine.active) return;
-        // Un seul moine par éclipse, dès que les créatures déferlent.
+        EclipseSchedule schedule = EclipseSchedule.get();
+
+        // Une seule apparition par éclipse, dès que les créatures déferlent.
         if (mobPhaseActive && !cur.moineApparu) {
-            spawnMonk(server, cfg, null);
+            if (!schedule.grandMonkDefeated()) {
+                DarkMonk grand = spawnGrandMonk(server, cfg, null);
+                if (grand != null) spawnDisciples(server, cfg, (ServerLevel) grand.level(), grand.blockPosition(), cfg.moine.disciplesMax);
+            } else {
+                spawnDisciplesNearPlayer(server, cfg, null);
+            }
         }
-        if (cur.moineApparu && !cur.moineVaincu && cur.moineUuid != null
-                && tick - lastMonkAnnounce >= cfg.moine.annonceSecondes * 20L) {
+
+        // Le Grand Moine rappelle ses disciples tombés (jamais plus que le maximum).
+        if (cur.moineApparu && !cur.moineVaincu && !schedule.grandMonkDefeated()
+                && tick - lastReinforce >= cfg.moine.renfortDisciplesSecondes * 20L) {
+            lastReinforce = tick;
+            Entity grand = findEntity(server, cur.moineUuid);
+            if (grand instanceof DarkMonk gm && gm.isAlive() && gm.level() instanceof ServerLevel gl) {
+                int missing = cfg.moine.disciplesMax - countDisciples(server);
+                if (missing > 0) {
+                    int n = spawnDisciples(server, cfg, gl, gm.blockPosition(), missing);
+                    if (n > 0) {
+                        gl.sendParticles(ParticleTypes.REVERSE_PORTAL, gm.getX(), gm.getY() + 2, gm.getZ(), 60, 1.5, 1.5, 1.5, 0.1);
+                        broadcast(server, Texts.msg("Le Grand Moine appelle " + n + (n > 1 ? " disciples" : " disciple") + " à ses côtés…"));
+                    }
+                }
+            }
+        }
+
+        if (cur.moineApparu && tick - lastMonkAnnounce >= cfg.moine.annonceSecondes * 20L) {
             lastMonkAnnounce = tick;
-            announceMonk(server, cur);
+            announceMonks(server, cur);
         }
     }
 
-    /** Fait apparaître le moine près d'un joueur (ou de {@code near}). Retourne null si impossible. */
-    public DarkMonk spawnMonk(MinecraftServer server, EclipseConfig cfg, ServerPlayer near) {
-        long now = System.currentTimeMillis();
-        Eclipse cur = EclipseSchedule.get().current(now);
-        if (cur == null) return null;
+    // ------------------------------------------------------------------ apparitions
 
+    private ServerPlayer pickPlayer(MinecraftServer server) {
         List<ServerPlayer> candidates = new ArrayList<>();
-        if (near != null) candidates.add(near);
-        else for (ServerLevel l : eclipseLevels(server)) {
+        for (ServerLevel l : eclipseLevels(server)) {
             if (l.getDifficulty() == Difficulty.PEACEFUL) continue;
             for (ServerPlayer p : l.players()) if (!p.isCreative() && !p.isSpectator()) candidates.add(p);
         }
         if (candidates.isEmpty()) return null;
+        return candidates.get(server.overworld().getRandom().nextInt(candidates.size()));
+    }
 
-        ServerPlayer target = candidates.get(server.overworld().getRandom().nextInt(candidates.size()));
-        ServerLevel level = target.serverLevel();
+    /** Position au sol à distance [min, max] d'un joueur. */
+    private BlockPos findMonkSpot(ServerLevel level, ServerPlayer target, int min, int max) {
         RandomSource rnd = level.getRandom();
         for (int attempt = 0; attempt < 24; attempt++) {
             double angle = rnd.nextDouble() * Math.PI * 2;
-            double dist = cfg.moine.distanceMin + rnd.nextDouble() * (cfg.moine.distanceMax - cfg.moine.distanceMin);
+            double dist = min + rnd.nextDouble() * (max - min);
             int x = Mth.floor(target.getX() + Math.cos(angle) * dist);
             int z = Mth.floor(target.getZ() + Math.sin(angle) * dist);
             if (!level.isPositionEntityTicking(new BlockPos(x, target.getBlockY(), z))) continue;
             BlockPos pos = findGround(level, target, x, z);
-            if (pos == null) continue;
+            if (pos != null) return pos;
+        }
+        return null;
+    }
 
-            DarkMonk monk = ModEntities.DARK_MONK.get().create(level);
-            if (monk == null) return null;
-            monk.moveTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, rnd.nextFloat() * 360F, 0F);
-            if (!level.noCollision(monk)) {
-                monk.discard();
-                continue;
-            }
-            EventHooks.finalizeMobSpawn(monk, level, level.getCurrentDifficultyAt(pos), MobSpawnType.EVENT, null);
-            monk.setHealth(monk.getMaxHealth());
-            markEclipseMob(monk, cfg.creatures);
-            level.addFreshEntity(monk);
-            eclipseMobs.add(monk.getUUID());
+    private <T extends DarkMonk> T placeMonk(ServerLevel level, EntityType<T> type, BlockPos pos, EclipseConfig cfg) {
+        T monk = type.create(level);
+        if (monk == null) return null;
+        monk.moveTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, level.getRandom().nextFloat() * 360F, 0F);
+        if (!level.noCollision(monk)) {
+            monk.discard();
+            return null;
+        }
+        EventHooks.finalizeMobSpawn(monk, level, level.getCurrentDifficultyAt(pos), MobSpawnType.EVENT, null);
+        monk.setHealth(monk.getMaxHealth());
+        markEclipseMob(monk, cfg.creatures);
+        level.addFreshEntity(monk);
+        eclipseMobs.add(monk.getUUID());
+        level.sendParticles(ParticleTypes.SQUID_INK, monk.getX(), monk.getY() + 1, monk.getZ(), 30, 0.5, 1.0, 0.5, 0.05);
+        return monk;
+    }
+
+    /** Grand Moine (1000 PV), un seul par éclipse tant qu'il n'a jamais été vaincu. */
+    public DarkMonk spawnGrandMonk(MinecraftServer server, EclipseConfig cfg, ServerPlayer near) {
+        Eclipse cur = EclipseSchedule.get().current(System.currentTimeMillis());
+        if (cur == null) return null;
+        ServerPlayer target = near != null ? near : pickPlayer(server);
+        if (target == null) return null;
+        ServerLevel level = target.serverLevel();
+        for (int i = 0; i < 4; i++) {
+            BlockPos pos = findMonkSpot(level, target, cfg.moine.distanceMin, cfg.moine.distanceMax);
+            if (pos == null) return null;
+            DarkMonk monk = placeMonk(level, ModEntities.DARK_MONK.get(), pos, cfg);
+            if (monk == null) continue;
 
             cur.moineApparu = true;
             cur.moineVaincu = false;
@@ -747,10 +799,11 @@ public final class EclipseManager {
             EclipseSchedule.get().save();
             monkLastPos = pos;
             lastMonkAnnounce = tick;
+            lastReinforce = tick;
 
-            broadcast(server, Texts.msg("Un ").append(Component.literal("Moine ténébreux").withStyle(ChatFormatting.DARK_PURPLE, ChatFormatting.BOLD))
+            broadcast(server, Texts.msg("Le ").append(Component.literal("Grand Moine ténébreux").withStyle(ChatFormatting.DARK_PURPLE, ChatFormatting.BOLD))
                     .append(Component.literal(" est apparu en " + coords(pos) + ", près de " + target.getGameProfile().getName()
-                            + ". Ne l'approchez pas… ou terrassez-le !").withStyle(ChatFormatting.YELLOW)));
+                            + ", entouré de ses disciples. Ne l'approchez pas… ou terrassez-le !").withStyle(ChatFormatting.YELLOW)));
             for (ServerPlayer p : server.getPlayerList().getPlayers()) {
                 p.level().playSound(null, p.blockPosition(), SoundEvents.EVOKER_PREPARE_SUMMON, SoundSource.HOSTILE, 0.8F, 0.5F);
             }
@@ -759,58 +812,148 @@ public final class EclipseManager {
         return null;
     }
 
-    private void announceMonk(MinecraftServer server, Eclipse cur) {
-        UUID id;
-        try {
-            id = UUID.fromString(cur.moineUuid);
-        } catch (Exception e) {
-            return;
+    /** Fait apparaître jusqu'à {@code wanted} disciples autour d'une position (limite globale respectée). */
+    public int spawnDisciples(MinecraftServer server, EclipseConfig cfg, ServerLevel level, BlockPos center, int wanted) {
+        if (level == null || center == null) return 0;
+        int room = cfg.moine.disciplesMax - countDisciples(server);
+        int n = Math.min(wanted, room);
+        int spawned = 0;
+        RandomSource rnd = level.getRandom();
+        for (int i = 0; i < n; i++) {
+            for (int attempt = 0; attempt < 10; attempt++) {
+                int x = center.getX() + rnd.nextInt(9) - 4;
+                int z = center.getZ() + rnd.nextInt(9) - 4;
+                BlockPos pos = null;
+                for (int dy = 4; dy >= -6 && pos == null; dy--) {
+                    BlockPos p = new BlockPos(x, center.getY() + dy, z);
+                    if (isValidSpawn(level, p)) pos = p;
+                }
+                if (pos == null) continue;
+                if (placeMonk(level, ModEntities.DISCIPLE_MONK.get(), pos, cfg) != null) {
+                    spawned++;
+                    break;
+                }
+            }
         }
-        Entity monk = null;
+        return spawned;
+    }
+
+    /** Après la chute du Grand Moine : les disciples viennent seuls. */
+    public int spawnDisciplesNearPlayer(MinecraftServer server, EclipseConfig cfg, ServerPlayer near) {
+        Eclipse cur = EclipseSchedule.get().current(System.currentTimeMillis());
+        if (cur == null) return 0;
+        ServerPlayer target = near != null ? near : pickPlayer(server);
+        if (target == null) return 0;
+        ServerLevel level = target.serverLevel();
+        BlockPos center = findMonkSpot(level, target, cfg.moine.distanceMin, cfg.moine.distanceMax);
+        if (center == null) return 0;
+        int n = spawnDisciples(server, cfg, level, center, cfg.moine.disciplesMax);
+        if (n > 0) {
+            cur.moineApparu = true;
+            cur.moineUuid = null;
+            EclipseSchedule.get().save();
+            monkLastPos = center;
+            lastMonkAnnounce = tick;
+            broadcast(server, Texts.msg(n + (n > 1 ? " moines disciples sont apparus" : " moine disciple est apparu") + " en " + coords(center)
+                    + ". Sans leur maître, ils errent en quête de vengeance…"));
+        }
+        return n;
+    }
+
+    private List<DiscipleMonk> disciples(MinecraftServer server) {
+        List<DiscipleMonk> out = new ArrayList<>();
         for (ServerLevel l : server.getAllLevels()) {
-            monk = l.getEntity(id);
-            if (monk != null) break;
+            for (DiscipleMonk d : l.getEntities(ModEntities.DISCIPLE_MONK.get(), Entity::isAlive)) out.add(d);
         }
-        if (monk != null && monk.isAlive()) {
-            monkLastPos = monk.blockPosition();
-            Player nearest = monk.level().getNearestPlayer(monk, 256);
+        return out;
+    }
+
+    public int countDisciples(MinecraftServer server) {
+        return disciples(server).size();
+    }
+
+    private static Entity findEntity(MinecraftServer server, String uuid) {
+        if (uuid == null) return null;
+        try {
+            UUID id = UUID.fromString(uuid);
+            for (ServerLevel l : server.getAllLevels()) {
+                Entity e = l.getEntity(id);
+                if (e != null) return e;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    // ------------------------------------------------------------------ annonces
+
+    private void announceMonks(MinecraftServer server, Eclipse cur) {
+        Entity grand = cur.moineVaincu ? null : findEntity(server, cur.moineUuid);
+        List<DiscipleMonk> ds = disciples(server);
+        if (grand instanceof DarkMonk gm && gm.isAlive()) {
+            monkLastPos = gm.blockPosition();
+            Player nearest = gm.level().getNearestPlayer(gm, 256);
             String near = nearest == null ? "" : " — près de " + nearest.getGameProfile().getName()
-                    + " (" + Mth.floor(nearest.distanceTo(monk)) + " blocs)";
-            int hp = Mth.ceil(((LivingEntity) monk).getHealth());
-            broadcast(server, Texts.msg("Le ").append(Component.literal("Moine ténébreux").withStyle(ChatFormatting.DARK_PURPLE))
-                    .append(Component.literal(" rôde en " + coords(monkLastPos) + near + " · " + hp + " PV").withStyle(ChatFormatting.GRAY)));
-        } else if (monkLastPos != null) {
-            broadcast(server, Texts.msg("Le ").append(Component.literal("Moine ténébreux").withStyle(ChatFormatting.DARK_PURPLE))
-                    .append(Component.literal(" a été vu pour la dernière fois en " + coords(monkLastPos) + ".").withStyle(ChatFormatting.GRAY)));
+                    + " (" + Mth.floor(nearest.distanceTo(gm)) + " blocs)";
+            broadcast(server, Texts.msg("Le ").append(Component.literal("Grand Moine").withStyle(ChatFormatting.DARK_PURPLE))
+                    .append(Component.literal(" rôde en " + coords(monkLastPos) + near + " · " + Mth.ceil(gm.getHealth()) + " PV · "
+                            + ds.size() + (ds.size() > 1 ? " disciples" : " disciple")).withStyle(ChatFormatting.GRAY)));
+        } else if (!ds.isEmpty()) {
+            DiscipleMonk d = ds.get(0);
+            monkLastPos = d.blockPosition();
+            broadcast(server, Texts.msg(ds.size() + (ds.size() > 1 ? " moines disciples rôdent" : " moine disciple rôde")
+                    + " vers " + coords(monkLastPos) + "."));
+        } else if (!cur.moineVaincu && cur.moineUuid != null && monkLastPos != null) {
+            broadcast(server, Texts.msg("Le Grand Moine a été vu pour la dernière fois en " + coords(monkLastPos) + "."));
         }
     }
+
+    // ------------------------------------------------------------------ morts
 
     public void onMonkDeath(DarkMonk monk, DamageSource source) {
         MinecraftServer server = monk.getServer();
         if (server == null) return;
+        String killer = source.getEntity() instanceof Player p ? p.getGameProfile().getName() : null;
+        if (!monk.isGrand()) {
+            if (killer != null) {
+                broadcast(server, Texts.msg("Un moine disciple a été abattu par " + killer + "."));
+            }
+            return;
+        }
         Eclipse cur = EclipseSchedule.get().current(System.currentTimeMillis());
         if (cur != null && monk.getUUID().toString().equals(cur.moineUuid)) {
             cur.moineVaincu = true;
             EclipseSchedule.get().save();
         }
-        String killer = source.getEntity() instanceof Player p ? p.getGameProfile().getName() : null;
-        broadcast(server, Texts.msg("Le ").append(Component.literal("Moine ténébreux").withStyle(ChatFormatting.DARK_PURPLE, ChatFormatting.BOLD))
+        EclipseSchedule.get().setGrandMonkDefeated(true);
+        broadcast(server, Texts.msg("Le ").append(Component.literal("Grand Moine ténébreux").withStyle(ChatFormatting.DARK_PURPLE, ChatFormatting.BOLD))
                 .append(Component.literal(killer != null ? " a été terrassé par " + killer + " !" : " a été terrassé !").withStyle(ChatFormatting.GOLD)));
+        EclipseConfig cfg = EclipseConfig.get();
+        if (!cfg.moine.commandeCinematique.isBlank()) {
+            cinematicAtTick = tick + Math.max(1, cfg.moine.delaiCinematiqueSecondes * 20L);
+        }
     }
 
-    /** Pour /eclipse moine : un moine est-il déjà en vie ? */
+    /** Lance la cinématique via le mod Citizen Cinématique (commande configurable). */
+    private void runCinematic(MinecraftServer server, EclipseConfig cfg) {
+        String cmd = cfg.moine.commandeCinematique.trim();
+        if (cmd.isEmpty()) return;
+        if (cmd.startsWith("/")) cmd = cmd.substring(1);
+        try {
+            CommandSourceStack src = server.createCommandSourceStack().withSuppressedOutput().withPermission(4);
+            server.getCommands().performPrefixedCommand(src, cmd);
+            CitizenEclipse.LOGGER.info("[Eclipse] Cinématique lancée : /{}", cmd);
+        } catch (Exception e) {
+            CitizenEclipse.LOGGER.error("[Eclipse] Échec de la commande de cinématique '/{}' : {}", cmd, e.toString());
+        }
+    }
+
+    /** Pour /eclipse moine : le Grand Moine est-il en vie ? */
     public boolean monkAlive(MinecraftServer server) {
         Eclipse cur = EclipseSchedule.get().current(System.currentTimeMillis());
         if (cur == null || cur.moineUuid == null || cur.moineVaincu) return false;
-        try {
-            UUID id = UUID.fromString(cur.moineUuid);
-            for (ServerLevel l : server.getAllLevels()) {
-                Entity e = l.getEntity(id);
-                if (e != null && e.isAlive()) return true;
-            }
-        } catch (Exception ignored) {
-        }
-        return false;
+        Entity e = findEntity(server, cur.moineUuid);
+        return e != null && e.isAlive();
     }
 
     private static String coords(BlockPos p) {

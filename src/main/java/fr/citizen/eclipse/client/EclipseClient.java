@@ -95,6 +95,8 @@ public final class EclipseClient {
             event.registerEntityRenderer(ModEntities.DUSK_SPIDER.get(), EclipseRenderers.Spider::new);
             event.registerEntityRenderer(ModEntities.ECLIPSE_WRAITH.get(), EclipseRenderers.Wraith::new);
             event.registerEntityRenderer(ModEntities.DARK_MONK.get(), DarkMonkRenderer::new);
+            event.<fr.citizen.eclipse.entity.DarkMonk>registerEntityRenderer(ModEntities.DISCIPLE_MONK.get(),
+                    ctx -> new DarkMonkRenderer(ctx, DarkMonkRenderer.DISCIPLE_TEXTURE, DarkMonkRenderer.DISCIPLE_EYES, 0.5F));
         }
 
         @SubscribeEvent

@@ -66,7 +66,10 @@ public final class EclipseCommand {
                         .then(Commands.argument("id", IntegerArgumentType.integer(1)).executes(EclipseCommand::cancel)))
                 .then(Commands.literal("arreter").requires(s -> s.hasPermission(2)).executes(EclipseCommand::stop))
                 .then(Commands.literal("generer").requires(s -> s.hasPermission(2)).executes(EclipseCommand::generate))
-                .then(Commands.literal("moine").requires(s -> s.hasPermission(2)).executes(EclipseCommand::monk))
+                .then(Commands.literal("moine").requires(s -> s.hasPermission(2)).executes(EclipseCommand::monk)
+                        .then(Commands.literal("disciples").executes(EclipseCommand::disciples))
+                        .then(Commands.literal("statut").executes(EclipseCommand::monkStatus))
+                        .then(Commands.literal("reinitialiser").executes(EclipseCommand::monkReset)))
                 .then(Commands.literal("vague").requires(s -> s.hasPermission(2)).executes(EclipseCommand::wave))
                 .then(Commands.literal("recharger").requires(s -> s.hasPermission(2)).executes(EclipseCommand::reload)));
     }
@@ -265,23 +268,60 @@ public final class EclipseCommand {
         return rep.spawned;
     }
 
-    /** Fait apparaître le Moine ténébreux près de soi (une éclipse doit être en cours). */
+    /** Fait apparaître le Grand Moine (ou ses disciples s'il a déjà été vaincu) près de soi. */
     private static int monk(CommandContext<CommandSourceStack> c) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         var player = c.getSource().getPlayerOrException();
         var server = c.getSource().getServer();
+        EclipseConfig cfg = EclipseConfig.get();
         if (EclipseSchedule.get().current(System.currentTimeMillis()) == null) {
-            c.getSource().sendFailure(Component.literal("Le moine n'apparaît que pendant une éclipse (/eclipse lancer)."));
+            c.getSource().sendFailure(Component.literal("Les moines n'apparaissent que pendant une éclipse (/eclipse lancer)."));
             return 0;
+        }
+        if (EclipseSchedule.get().grandMonkDefeated()) {
+            c.getSource().sendSuccess(() -> Texts.msg("Le Grand Moine a déjà été vaincu : seuls ses disciples peuvent revenir."), false);
+            return disciples(c);
         }
         if (EclipseManager.get().monkAlive(server)) {
-            c.getSource().sendFailure(Component.literal("Le Moine ténébreux est déjà en vie : il n'y en a qu'un par éclipse."));
+            c.getSource().sendFailure(Component.literal("Le Grand Moine est déjà en vie : il n'y en a qu'un par éclipse."));
             return 0;
         }
-        var monk = EclipseManager.get().spawnMonk(server, EclipseConfig.get(), player);
+        var monk = EclipseManager.get().spawnGrandMonk(server, cfg, player);
         if (monk == null) {
             c.getSource().sendFailure(Component.literal("Aucun emplacement valide trouvé autour de vous (24-40 blocs)."));
             return 0;
         }
+        EclipseManager.get().spawnDisciples(server, cfg, (net.minecraft.server.level.ServerLevel) monk.level(), monk.blockPosition(), cfg.moine.disciplesMax);
+        return 1;
+    }
+
+    private static int disciples(CommandContext<CommandSourceStack> c) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        var player = c.getSource().getPlayerOrException();
+        var server = c.getSource().getServer();
+        if (EclipseSchedule.get().current(System.currentTimeMillis()) == null) {
+            c.getSource().sendFailure(Component.literal("Les moines n'apparaissent que pendant une éclipse (/eclipse lancer)."));
+            return 0;
+        }
+        int n = EclipseManager.get().spawnDisciplesNearPlayer(server, EclipseConfig.get(), player);
+        if (n == 0) {
+            c.getSource().sendFailure(Component.literal("Aucun disciple ajouté (maximum de " + EclipseConfig.get().moine.disciplesMax
+                    + " déjà atteint, ou pas d'emplacement valide)."));
+        }
+        return n;
+    }
+
+    private static int monkStatus(CommandContext<CommandSourceStack> c) {
+        boolean defeated = EclipseSchedule.get().grandMonkDefeated();
+        int ds = EclipseManager.get().countDisciples(c.getSource().getServer());
+        String cine = EclipseConfig.get().moine.commandeCinematique;
+        c.getSource().sendSuccess(() -> Texts.msg("Grand Moine : " + (defeated ? "VAINCU (ne revient plus)" : "invaincu")
+                + " · disciples en vie : " + ds + "/" + EclipseConfig.get().moine.disciplesMax
+                + " · cinématique : " + (cine.isBlank() ? "aucune configurée" : "/" + cine)), false);
+        return 1;
+    }
+
+    private static int monkReset(CommandContext<CommandSourceStack> c) {
+        EclipseSchedule.get().setGrandMonkDefeated(false);
+        c.getSource().sendSuccess(() -> Texts.msg("Le Grand Moine pourra de nouveau apparaître aux prochaines éclipses."), true);
         return 1;
     }
 

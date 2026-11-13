@@ -39,6 +39,8 @@ public final class EclipseSchedule {
         List<Eclipse> eclipses = new ArrayList<>();
         /** Valeur de la règle doDaylightCycle à restaurer après une éclipse (null = rien à restaurer). */
         Boolean restoreDaylightCycle = null;
+        /** Le Grand Moine a été vaincu : il ne revient plus, seuls ses disciples apparaissent. */
+        boolean grandMoineVaincu = false;
     }
 
     private Data data = new Data();
@@ -148,6 +150,15 @@ public final class EclipseSchedule {
 
     public synchronized void setRestoreDaylightCycle(Boolean value) {
         data.restoreDaylightCycle = value;
+        save();
+    }
+
+    public synchronized boolean grandMonkDefeated() {
+        return data.grandMoineVaincu;
+    }
+
+    public synchronized void setGrandMonkDefeated(boolean value) {
+        data.grandMoineVaincu = value;
         save();
     }
 
